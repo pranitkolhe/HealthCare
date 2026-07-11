@@ -11,7 +11,13 @@ if (env.smtpUser && env.smtpPass) {
   transportOptions.auth = { user: env.smtpUser, pass: env.smtpPass };
 }
 
-const transporter = nodemailer.createTransport(transportOptions);
+// const transporter = nodemailer.createTransport(transportOptions);
+const transporter = nodemailer.createTransport({
+  ...transportOptions,
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
+});
 
 export async function sendMail(to: string, subject: string, text?: string, html?: string) {
   const from = env.emailFrom || 'no-reply@localhost';

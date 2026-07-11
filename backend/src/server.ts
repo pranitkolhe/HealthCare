@@ -4,6 +4,8 @@ import logger from './config/logger';
 import prisma from './config/db';
 import { verifyTransport } from './shared/mailer';
 
+
+
 async function initialiseDependencies() {
   try {
     await prisma.$connect();
