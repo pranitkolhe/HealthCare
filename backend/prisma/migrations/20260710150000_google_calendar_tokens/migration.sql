@@ -1,0 +1,5 @@
+ALTER TYPE "CalendarSyncStatus" ADD VALUE IF NOT EXISTS 'SKIPPED';
+
+ALTER TABLE "User"
+  ADD COLUMN IF NOT EXISTS "googleRefreshTokenEncrypted" TEXT,
+  ADD COLUMN IF NOT EXISTS "googleCalendarId" TEXT;

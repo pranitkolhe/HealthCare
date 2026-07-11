@@ -1,0 +1,25 @@
+{
+  "name": "healthcare-appointment-manager",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "npx concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "lint": "echo \"Add linting tasks later\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "nodemailer": "^9.0.3"
+  }
+}
