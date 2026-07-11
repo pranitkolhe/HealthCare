@@ -35,12 +35,35 @@ export default { sendMail };
 
 export async function verifyTransport() {
   try {
-    // @ts-ignore
-    const ok = await (transporter as any).verify();
-    logger.info('SMTP transport verified', { ok });
+    await transporter.verify();
+
+    logger.info("SMTP transport verified successfully");
+
     return true;
-  } catch (err) {
-    logger.warn('SMTP transport verification failed', { error: err });
+  } catch (err: any) {
+    logger.error("SMTP transport verification failed", {
+      message: err?.message,
+      code: err?.code,
+      errno: err?.errno,
+      syscall: err?.syscall,
+      address: err?.address,
+      port: err?.port,
+      command: err?.command,
+      stack: err?.stack,
+    });
+
     return false;
   }
 }
+
+// export async function verifyTransport() {
+//   try {
+//     // @ts-ignore
+//     const ok = await (transporter as any).verify();
+//     logger.info('SMTP transport verified', { ok });
+//     return true;
+//   } catch (err) {
+//     logger.warn('SMTP transport verification failed', { error: err });
+//     return false;
+//   }
+// }
