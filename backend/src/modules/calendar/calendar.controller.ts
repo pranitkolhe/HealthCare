@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import env from '../../config/env';
 import prisma from '../../config/db';
+import logger from '../../config/logger';
 import { createGoogleOAuthClient, encryptGoogleToken, syncAppointmentToCalendar } from '../integrations/calendar.service';
 import { UnauthenticatedError } from '../../shared/errors/AppError';
 
@@ -33,7 +34,11 @@ export async function callback(req: Request, res: Response, next: NextFunction) 
       },
       select: { id: true },
     });
-    upcomingAppointments.forEach((appointment) => void syncAppointmentToCalendar(appointment.id));
+    upcomingAppointments.forEach((appointment: { id: string }) => {
+      void syncAppointmentToCalendar(appointment.id).catch((error) =>
+        logger.error('Calendar appointment sync failed after OAuth connection', { appointmentId: appointment.id, error: error instanceof Error ? error.message : error })
+      );
+    });
     const destination = payload.role === 'DOCTOR' ? '/doctor' : '/patient';
     res.redirect(`${env.corsOrigin[0]}${destination}?calendar=connected`);
   } catch (error) { next(error); }

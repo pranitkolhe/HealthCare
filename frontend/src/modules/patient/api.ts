@@ -38,6 +38,10 @@ export function cancelAppointment(appointmentId: string, reason?: string) {
   return api.delete(`/appointments/${appointmentId}`, { data: { reason } }).then((res) => res.data);
 }
 
+export function rescheduleAppointment(appointmentId: string, slotStart: string) {
+  return api.patch(`/appointments/${appointmentId}/reschedule`, { slotStart }).then((res) => res.data);
+}
+
 export function listPatientAppointments(params: { status?: string; page?: number; limit?: number } = {}) {
   return api.get('/patients/me/appointments', { params }).then((res) => res.data);
 }

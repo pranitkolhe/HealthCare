@@ -83,4 +83,20 @@ export async function removeAppointmentFromCalendar(appointmentId: string) {
   }
 }
 
-export default { syncAppointmentToCalendar, removeAppointmentFromCalendar };
+export async function updateAppointmentOnCalendar(appointmentId: string) {
+  const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, include: { calendarEvent: true, doctor: { include: { user: true } }, patient: { include: { user: true } } } });
+  if (!appointment?.calendarEvent || appointment.calendarEvent.googleEventId.startsWith('PENDING_')) return syncAppointmentToCalendar(appointmentId);
+  const owner = appointment.doctor.user.googleRefreshTokenEncrypted ? appointment.doctor.user : appointment.patient.user.googleRefreshTokenEncrypted ? appointment.patient.user : null;
+  if (!owner) return;
+  try {
+    const oauth = createGoogleOAuthClient();
+    oauth.setCredentials({ refresh_token: decryptGoogleToken(owner.googleRefreshTokenEncrypted!) });
+    await google.calendar({ version: 'v3', auth: oauth }).events.update({ calendarId: owner.googleCalendarId || 'primary', eventId: appointment.calendarEvent.googleEventId, sendUpdates: 'all', requestBody: { start: { dateTime: appointment.slotStart.toISOString() }, end: { dateTime: appointment.slotEnd.toISOString() } } });
+    await prisma.calendarEvent.update({ where: { appointmentId }, data: { lastSyncedAt: new Date(), syncStatus: 'SYNCED' } });
+  } catch (error) {
+    await prisma.calendarEvent.update({ where: { appointmentId }, data: { syncStatus: 'FAILED' } }).catch(() => undefined);
+    throw error;
+  }
+}
+
+export default { syncAppointmentToCalendar, updateAppointmentOnCalendar, removeAppointmentFromCalendar };

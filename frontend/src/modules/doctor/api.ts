@@ -11,7 +11,8 @@ export function getDoctorAppointments(params: DoctorAppointmentsParams) {
   return api.get('/doctors/me/appointments', { params }).then((res) => res.data);
 }
 
-export function addDoctorNotes(appointmentId: string, payload: { doctorNotes: string; prescription: string }) {
+export type MedicationInput = { medicineName: string; dosage: string; frequency: string; durationDays: number };
+export function addDoctorNotes(appointmentId: string, payload: { doctorNotes: string; prescription: string; medications?: MedicationInput[] }) {
   return api.post(`/doctors/me/appointments/${appointmentId}/notes`, payload).then((res) => res.data);
 }
 

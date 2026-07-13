@@ -19,6 +19,14 @@ export async function cancelAppointment(req: Request, res: Response, next: NextF
   }
 }
 
+export async function rescheduleAppointment(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.status(200).json(await appointmentService.rescheduleAppointment(req.user!, req.params.appointmentId, req.body.slotStart));
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getAppointment(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await appointmentService.getAppointmentDetail(req.user!, req.params.appointmentId);

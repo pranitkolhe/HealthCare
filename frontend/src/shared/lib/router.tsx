@@ -7,7 +7,8 @@ import AdminDashboardPage from '../../modules/admin/pages/AdminDashboardPage';
 import { useAuth } from '../../modules/auth/hooks/useAuth';
 
 function ProtectedRoute({ roles, element }: { roles: string[]; element: JSX.Element }) {
-  const { user } = useAuth();
+  const { user, restoring } = useAuth();
+  if (restoring) return <div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-medium text-slate-600">Restoring your secure session…</div>;
   if (!user) return <Navigate to="/login" replace />;
   if (!roles.includes(user.role)) return <Navigate to="/" replace />;
   return element;

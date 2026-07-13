@@ -2,7 +2,7 @@ import { Queue } from 'bullmq';
 import env from '../config/env';
 import logger from '../config/logger';
 
-export type BackgroundJobName = 'ai:pre-visit' | 'ai:post-visit' | 'notification:deliver' | 'calendar:sync' | 'calendar:delete';
+export type BackgroundJobName = 'ai:pre-visit' | 'ai:post-visit' | 'notification:deliver' | 'calendar:sync' | 'calendar:update' | 'calendar:delete' | 'reminders:scan';
 
 type BackgroundJobData = { appointmentId?: string; notificationId?: string };
 

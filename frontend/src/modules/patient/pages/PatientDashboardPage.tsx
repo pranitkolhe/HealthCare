@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth/hooks/useAuth';
 import { changePassword, logout } from '../../auth/auth.api';
-import { searchDoctors, getDoctorAvailability, getDoctorSchedule, bookAppointment, cancelAppointment, connectGoogleCalendar, getPatientProfile, listMyNotifications, listPatientAppointments, updatePatientProfile } from '../api';
+import { searchDoctors, getDoctorAvailability, getDoctorSchedule, bookAppointment, cancelAppointment, rescheduleAppointment, connectGoogleCalendar, getPatientProfile, listMyNotifications, listPatientAppointments, updatePatientProfile } from '../api';
 
 type Doctor = { id: string; email: string; doctorProfile: { id: string; fullName: string; specialization: string; bio?: string } };
 
@@ -15,7 +15,7 @@ type PatientAppointment = {
   slotEnd: string;
   status: string;
   prescription?: string | null;
-  doctor: { fullName: string };
+  doctor: { id: string; fullName: string };
   postVisitSummary?: { status: string; patientFriendlyExplanation: string; followUpInstructions: string } | null;
   calendarEvent?: { syncStatus: string } | null;
 };
@@ -59,6 +59,9 @@ export default function PatientDashboardPage() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
 
   const queryClient = useQueryClient();
@@ -70,7 +73,7 @@ export default function PatientDashboardPage() {
   const doctorsQuery = useQuery<{ doctors: Doctor[]; total: number; page: number; limit: number }>({
     queryKey: ['doctors', searchParams.specialization, searchParams.search],
     queryFn: () => searchDoctors({ specialization: searchParams.specialization, search: searchParams.search, limit: 10 }),
-    enabled: !!searchParams.search || !!searchParams.specialization,
+    enabled: true,
   });
 
   const availabilityQuery = useQuery<{ slots: Slot[] }>({
@@ -84,13 +87,18 @@ export default function PatientDashboardPage() {
     queryFn: () => getDoctorSchedule(selectedDoctor!.doctorProfile.id),
     enabled: Boolean(selectedDoctor),
   });
-
   const appointmentsQuery = useQuery<{ appointments: PatientAppointment[] }>({
     queryKey: ['patientAppointments'],
     queryFn: () => listPatientAppointments({ status: 'BOOKED', limit: 10 }),
     // Avoid repeatedly issuing the same failing request and obscuring the
     // actual API error in the browser console.
     retry: false,
+  });
+  const rescheduleAppointmentData = appointmentsQuery.data?.appointments.find((appointment) => appointment.id === reschedulingId);
+  const rescheduleSlotsQuery = useQuery<{ slots: Slot[] }>({
+    queryKey: ['rescheduleAvailability', rescheduleAppointmentData?.doctor.id, rescheduleDate],
+    queryFn: () => getDoctorAvailability(rescheduleAppointmentData!.doctor.id, rescheduleDate),
+    enabled: Boolean(rescheduleAppointmentData && rescheduleDate),
   });
 
   const historyQuery = useQuery<{ appointments: PatientAppointment[] }>({
@@ -114,13 +122,8 @@ export default function PatientDashboardPage() {
   }, [profileQuery.data]);
 
   async function handleLogout() {
-    try {
-      await logout();
-    } finally {
-      setUser(null);
-      setToken(null);
-      navigate('/login');
-    }
+    setUser(null); setToken(null); navigate('/login');
+    void logout();
   }
 
   async function handleBook() {
@@ -152,6 +155,17 @@ export default function PatientDashboardPage() {
     } catch (error) {
       setMessage(getRequestErrorMessage(error, 'Unable to cancel this appointment.'));
     }
+  }
+
+  async function handleReschedule(slotStart: string) {
+    if (!reschedulingId) return;
+    try {
+      await rescheduleAppointment(reschedulingId, slotStart);
+      setMessage('Appointment rescheduled. Your calendar will update automatically if it is connected.');
+      setReschedulingId(null); setRescheduleDate('');
+      queryClient.invalidateQueries({ queryKey: ['patientAppointments'] });
+      queryClient.invalidateQueries({ queryKey: ['patientAppointmentHistory'] });
+    } catch (error) { setMessage(getRequestErrorMessage(error, 'Unable to reschedule this appointment.')); }
   }
 
   async function handleProfileSave(event: React.FormEvent<HTMLFormElement>) {
@@ -191,11 +205,11 @@ export default function PatientDashboardPage() {
         <div className="flex items-center gap-4">
           <div className="h-10 w-10 rounded-full bg-sky-600 flex items-center justify-center text-white font-bold">H</div>
           <div>
-            <h1 className="text-2xl font-semibold">Patient Dashboard</h1>
-            <p className="text-sm text-gray-500">Find doctors and book appointments</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">HealthCare</h1>
+            <p className="text-sm text-gray-500">Find doctors, manage appointments, and stay informed.</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <button type="button" aria-label="Toggle navigation" onClick={() => setMenuOpen((open) => !open)} className="rounded-xl border p-2 text-xl lg:hidden">☰</button><div className={`${menuOpen ? 'flex' : 'hidden'} w-full flex-col gap-2 lg:flex lg:w-auto lg:flex-row lg:items-center`}>
           {[['discover', 'Find doctors'], ['appointments', 'Appointments'], ['history', 'History'], ['notifications', 'Notifications']].map(([section, label]) => <Link key={section} to={`/patient/${section}`} className={`rounded-xl px-3 py-2 text-sm font-medium transition ${activeSection === section ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</Link>)}
           <button type="button" onClick={handleCalendarConnect} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700">Connect Calendar</button>
           <Link aria-label="Open profile" to="/patient/profile" className={`flex h-10 w-10 items-center justify-center rounded-full font-semibold ${activeSection === 'profile' ? 'bg-sky-700 text-white ring-2 ring-sky-200' : 'bg-sky-100 text-sky-700'}`}>{profileName.slice(0, 1).toUpperCase() || 'P'}</Link>
@@ -228,19 +242,10 @@ export default function PatientDashboardPage() {
       </section>}
       {activeSection === 'discover' && <section id="discover-care" className="mb-8 bg-white rounded-2xl shadow p-6">
         <h2 className="text-xl font-semibold mb-4">Find a doctor</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by doctor name"
-            className="w-full rounded-md border border-gray-200 px-4 py-3 shadow-sm"
-          />
-          <input
-            value={specialization}
-            onChange={(event) => setSpecialization(event.target.value)}
-            placeholder="Specialization"
-            className="w-full rounded-md border border-gray-200 px-4 py-3 shadow-sm"
-          />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Type a doctor name" className="w-full rounded-md border border-gray-200 bg-white px-4 py-3 shadow-sm" />
+          <select value="" onChange={(event) => setSearch(event.target.value)} className="w-full rounded-md border border-gray-200 bg-white px-4 py-3 shadow-sm"><option value="">Choose a registered doctor</option>{doctorsQuery.data?.doctors.map((doctor) => <option key={doctor.id} value={doctor.doctorProfile.fullName}>Dr. {doctor.doctorProfile.fullName} — {doctor.doctorProfile.specialization}</option>)}</select>
+          <select value={specialization} onChange={(event) => setSpecialization(event.target.value)} className="w-full rounded-md border border-gray-200 bg-white px-4 py-3 shadow-sm"><option value="">All specializations</option>{Array.from(new Set(doctorsQuery.data?.doctors.map((doctor) => doctor.doctorProfile.specialization) ?? [])).map((value) => <option key={value} value={value}>{value}</option>)}</select>
           <div className="flex items-center">
             <button
               onClick={() => setSearchParams({ search, specialization })}
@@ -325,10 +330,9 @@ export default function PatientDashboardPage() {
                     </div>
                   </div>
                   {appointment.status === 'BOOKED' && (
-                    <button type="button" onClick={() => handleCancel(appointment.id)} className="mt-3 rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50">
-                      Cancel appointment
-                    </button>
+                    <div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => { setReschedulingId(appointment.id); setRescheduleDate(''); }} className="rounded-lg border border-sky-200 px-3 py-2 text-sm font-medium text-sky-700 hover:bg-sky-50">Reschedule</button><button type="button" onClick={() => handleCancel(appointment.id)} className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50">Cancel appointment</button></div>
                   )}
+                  {reschedulingId === appointment.id && <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 p-4"><p className="font-medium text-sky-950">Choose a new available slot</p><input type="date" min={today} value={rescheduleDate} onChange={(event) => setRescheduleDate(event.target.value)} className="mt-3 rounded-lg border border-sky-200 px-3 py-2" />{rescheduleSlotsQuery.isLoading && <p className="mt-2 text-sm">Loading slots…</p>}<div className="mt-3 flex flex-wrap gap-2">{rescheduleSlotsQuery.data?.slots.map((slot) => <button key={slot.start} type="button" onClick={() => handleReschedule(slot.start)} className="rounded-lg bg-sky-600 px-3 py-2 text-sm text-white hover:bg-sky-700">{new Date(slot.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</button>)}</div><button type="button" onClick={() => setReschedulingId(null)} className="mt-3 text-sm text-slate-600 underline">Cancel</button></div>}
                 </div>
               ))}
             </div>
@@ -354,8 +358,7 @@ export default function PatientDashboardPage() {
       </section>}
 
       {activeSection === 'discover' && selectedDoctor && (
-        <section className="bg-white rounded-2xl shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Select a slot for {selectedDoctor.doctorProfile.fullName}</h2>
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Book appointment"><section className="mx-auto min-h-full max-w-4xl rounded-2xl bg-white p-5 shadow-2xl sm:p-6"><div className="mb-4 flex items-center justify-between gap-4"><h2 className="text-xl font-semibold">Select a slot for {selectedDoctor.doctorProfile.fullName}</h2><button type="button" onClick={() => { setSelectedDoctor(null); setSelectedSlot(null); }} className="rounded-lg border px-3 py-2 text-sm">Close</button></div>
           <div className="mb-6 rounded-2xl border border-slate-200 p-4">
             <div className="flex items-center justify-between gap-3">
               <button type="button" onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} className="rounded-lg border px-3 py-1">Previous</button>
@@ -428,7 +431,7 @@ export default function PatientDashboardPage() {
               {message && <p className="text-sm text-gray-700">{message}</p>}
             </div>
           </div>
-        </section>
+        </section></div>
       )}
       </div>
     </div>

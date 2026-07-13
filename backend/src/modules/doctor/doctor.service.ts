@@ -107,14 +107,14 @@ export async function listDoctorAppointments(doctorUserId: string, query: { stat
     where,
     skip,
     take: limit,
-    orderBy: { slotStart: 'desc' },
+    orderBy: { slotStart: query.status === 'BOOKED' ? 'asc' : 'desc' },
     include: { patient: { select: { fullName: true } }, preVisitSummary: true, postVisitSummary: true, calendarEvent: true },
   });
 
   return { appointments, page, limit };
 }
 
-export async function addDoctorNotes(doctorUserId: string, appointmentId: string, doctorNotes: string, prescription: string) {
+export async function addDoctorNotes(doctorUserId: string, appointmentId: string, doctorNotes: string, prescription: string, medications: Array<{ medicineName: string; dosage: string; frequency: string; durationDays: number }> = []) {
   const doctorProfile = await prisma.doctorProfile.findUnique({ where: { userId: doctorUserId } });
   if (!doctorProfile) {
     throw new NotFoundError('Doctor profile not found');
@@ -131,9 +131,10 @@ export async function addDoctorNotes(doctorUserId: string, appointmentId: string
     throw new UnprocessableError('Cannot add notes before the appointment');
   }
 
-  await prisma.appointment.update({
-    where: { id: appointmentId },
-    data: { doctorNotes, prescription, status: 'COMPLETED' },
+  await prisma.$transaction(async (tx) => {
+    await tx.appointment.update({ where: { id: appointmentId }, data: { doctorNotes, prescription, status: 'COMPLETED' } });
+    await tx.medicationReminder.deleteMany({ where: { appointmentId } });
+    if (medications.length) await tx.medicationReminder.createMany({ data: medications.map((medication) => ({ appointmentId, medicineName: medication.medicineName, dosage: medication.dosage, frequency: medication.frequency, nextSendAt: new Date(), endDate: new Date(Date.now() + medication.durationDays * 24 * 60 * 60 * 1000) })) });
   });
 
   const existingSummary = await prisma.postVisitSummary.findUnique({ where: { appointmentId } });

@@ -48,7 +48,7 @@ export async function listAppointments(req: Request, res: Response, next: NextFu
 
 export async function addNotes(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await doctorService.addDoctorNotes(req.user!.id, req.params.appointmentId, req.body.doctorNotes, req.body.prescription);
+    const result = await doctorService.addDoctorNotes(req.user!.id, req.params.appointmentId, req.body.doctorNotes, req.body.prescription, req.body.medications);
     res.status(200).json(result);
   } catch (error) {
     next(error);

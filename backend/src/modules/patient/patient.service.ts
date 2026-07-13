@@ -40,9 +40,9 @@ export async function listPatientAppointments(userId: string, query: { status?: 
     where,
     skip,
     take: limit,
-    orderBy: { slotStart: 'desc' },
+    orderBy: { slotStart: query.status === 'BOOKED' ? 'asc' : 'desc' },
     include: {
-      doctor: { select: { user: { select: { email: true } }, fullName: true } },
+      doctor: { select: { id: true, user: { select: { email: true } }, fullName: true } },
       postVisitSummary: true,
       calendarEvent: true,
     },

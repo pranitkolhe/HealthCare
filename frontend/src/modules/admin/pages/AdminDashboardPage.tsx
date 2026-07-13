@@ -60,7 +60,7 @@ export default function AdminDashboardPage() {
     setLeaveReason('');
   }
 
-  async function handleLogout() { try { await logout(); } finally { setUser(null); setToken(null); navigate('/login'); } }
+  async function handleLogout() { setUser(null); setToken(null); navigate('/login'); void logout(); }
   async function handleCreateDoctor(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {

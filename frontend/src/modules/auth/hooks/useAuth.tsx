@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { setAccessToken as setApiAccessToken } from '../../../shared/lib/api';
+import api from '../../../shared/lib/api';
 
 type User = { id: string; email: string; role: string } | null;
 
@@ -8,6 +9,7 @@ type AuthContextValue = {
   token: string | null;
   setUser: (user: User) => void;
   setToken: (token: string | null) => void;
+  restoring: boolean;
 };
 
 const AuthContext = createContext<AuthContextValue>({
@@ -15,6 +17,7 @@ const AuthContext = createContext<AuthContextValue>({
   token: null,
   setUser: () => {},
   setToken: () => {},
+  restoring: true,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -23,6 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return stored ? JSON.parse(stored) : null;
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('accessToken'));
+  // A previously authenticated tab can render immediately from local storage;
+  // refresh then happens quietly in the background.
+  const [restoring, setRestoring] = useState(() => !localStorage.getItem('authUser'));
 
   useEffect(() => {
     if (user) {
@@ -41,6 +47,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setApiAccessToken(token);
   }, [token]);
 
+  // The access token is short-lived; renew it from the 7-day httpOnly refresh
+  // cookie whenever the app is opened again.
+  useEffect(() => {
+    void api.post('/auth/refresh').then((response) => {
+      setToken(response.data.accessToken as string);
+      setUser(response.data.user as User);
+    }).catch(() => {
+      setUser(null);
+      setToken(null);
+    }).finally(() => setRestoring(false));
+  // Restore only once on application startup; token updates must not rotate it repeatedly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const handleExpiredSession = () => {
       setUser(null);
@@ -51,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, setUser, setToken }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, token, setUser, setToken, restoring }}>{children}</AuthContext.Provider>
   );
 }
 

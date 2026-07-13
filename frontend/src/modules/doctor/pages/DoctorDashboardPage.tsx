@@ -24,12 +24,17 @@ export default function DoctorDashboardPage() {
   const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null);
   const [notes, setNotes] = useState('');
   const [prescription, setPrescription] = useState('');
+  const [medicineName, setMedicineName] = useState('');
+  const [medicineDosage, setMedicineDosage] = useState('');
+  const [medicineFrequency, setMedicineFrequency] = useState('Once daily');
+  const [medicineDurationDays, setMedicineDurationDays] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [bio, setBio] = useState('');
   const [manualExplanation, setManualExplanation] = useState('');
   const [manualFollowUp, setManualFollowUp] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
   const queryClient = useQueryClient();
   const profileQuery = useQuery({ queryKey: ['doctorProfile'], queryFn: getDoctorProfile });
 
@@ -52,13 +57,8 @@ export default function DoctorDashboardPage() {
   }, [status, date]);
 
   async function handleLogout() {
-    try {
-      await logout();
-    } finally {
-      setUser(null);
-      setToken(null);
-      navigate('/login');
-    }
+    setUser(null); setToken(null); navigate('/login');
+    void logout();
   }
 
   async function handleSubmitNotes(event: React.FormEvent<HTMLFormElement>) {
@@ -66,7 +66,8 @@ export default function DoctorDashboardPage() {
     if (!selectedAppointment) return;
 
     try {
-      await addDoctorNotes(selectedAppointment.id, { doctorNotes: notes, prescription });
+      const medications = medicineName || medicineDosage || medicineDurationDays ? [{ medicineName, dosage: medicineDosage, frequency: medicineFrequency, durationDays: Number(medicineDurationDays) }] : [];
+      await addDoctorNotes(selectedAppointment.id, { doctorNotes: notes, prescription, medications });
       setMessage('Visit marked completed. Notes saved and post-visit summary generation started.');
       setNotes('');
       setPrescription('');
@@ -139,21 +140,20 @@ export default function DoctorDashboardPage() {
       <div className="max-w-6xl mx-auto space-y-6">
         <header className="rounded-3xl bg-white p-8 shadow-sm flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold">Doctor Dashboard</h1>
-            <p className="mt-2 text-gray-600">Manage your appointments and add visit notes.</p>
-            <p className="mt-1 text-sm text-slate-500">Logged in as: {user?.email}</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">HealthCare</h1>
+            <p className="mt-2 text-gray-600">Your clinical workspace for appointments and follow-up care.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <button type="button" aria-label="Toggle navigation" onClick={() => setMenuOpen((open) => !open)} className="rounded-xl border p-2 text-xl sm:hidden">☰</button><div className={`${menuOpen ? 'flex' : 'hidden'} w-full flex-col gap-2 sm:flex sm:w-auto sm:flex-row sm:items-center`}>
             <Link to="/doctor/appointments" className={`rounded-xl px-3 py-2 text-sm font-medium ${activeSection === 'appointments' ? 'bg-sky-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}>Appointments</Link>
             <Link to="/doctor/profile" className={`rounded-xl px-3 py-2 text-sm font-medium ${activeSection === 'profile' ? 'bg-sky-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}>Profile</Link>
             <button type="button" onClick={handleCalendarConnect} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700">Connect Google Calendar</button>
-            <Link aria-label="Open profile" to="/doctor/profile" className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-600 font-semibold text-white">{user?.email?.slice(0, 1).toUpperCase() ?? 'D'}</Link>
+            <Link aria-label="Open profile" title={user?.email} to="/doctor/profile" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-600 font-semibold text-white ring-2 ring-sky-100">{user?.email?.slice(0, 1).toUpperCase() ?? 'D'}</Link>
             <button type="button" onClick={handleLogout} className="rounded-xl bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200">Logout</button>
           </div>
         </header>
         {activeSection === 'profile' && (
           <section className="rounded-3xl bg-white p-8 shadow-sm">
-            <h2 className="text-2xl font-semibold">Doctor profile</h2>
+            <h2 className="text-2xl font-semibold">Doctor profile</h2><p className="mt-1 text-sm text-slate-500">Signed in as {user?.email}</p>
             <p className="mt-1 text-sm text-slate-500">Your bio appears on the patient doctor directory.</p>
             <form onSubmit={handleProfileSave} className="mt-5 space-y-4">
               <textarea value={bio} onChange={(event) => setBio(event.target.value)} placeholder="Professional bio" rows={3} className="w-full rounded-2xl border border-slate-200 px-4 py-3" />
@@ -219,8 +219,9 @@ export default function DoctorDashboardPage() {
         </section>}
 
         {activeSection === 'appointments' && selectedAppointment && (
-          <section className="rounded-3xl bg-white p-8 shadow-sm">
-            <h2 className="text-2xl font-semibold mb-4">Appointment details</h2>
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label="Patient appointment details">
+          <section className="mx-auto min-h-full max-w-5xl rounded-3xl bg-white p-5 shadow-2xl sm:p-8">
+            <div className="mb-6 flex items-center justify-between gap-4"><div><p className="text-sm font-medium text-sky-700">Patient consultation</p><h2 className="text-2xl font-semibold">Appointment details</h2></div><button type="button" onClick={() => setSelectedAppointment(null)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">← Back to appointments</button></div>
             <div className="grid gap-4 sm:grid-cols-2 mb-6">
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm font-medium text-slate-700">Patient</p>
@@ -283,6 +284,7 @@ export default function DoctorDashboardPage() {
                 <span className="text-sm font-medium text-slate-700">Prescription</span>
                 <textarea value={prescription} onChange={(event) => setPrescription(event.target.value)} rows={3} className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3" required />
               </label>
+              <fieldset className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"><legend className="px-1 text-sm font-semibold text-emerald-900">Medication reminder (optional)</legend><p className="mb-3 text-xs text-emerald-800">Add this only when the patient needs a daily email reminder after the visit.</p><div className="grid gap-2 sm:grid-cols-4"><input value={medicineName} onChange={(event) => setMedicineName(event.target.value)} placeholder="Medicine name" className="rounded-xl border border-emerald-200 px-3 py-2" /><input value={medicineDosage} onChange={(event) => setMedicineDosage(event.target.value)} placeholder="Dosage" className="rounded-xl border border-emerald-200 px-3 py-2" /><select value={medicineFrequency} onChange={(event) => setMedicineFrequency(event.target.value)} className="rounded-xl border border-emerald-200 px-3 py-2"><option>Once daily</option><option>Twice daily</option><option>Three times daily</option></select><input type="number" min="1" value={medicineDurationDays} onChange={(event) => setMedicineDurationDays(event.target.value)} placeholder="Days" className="rounded-xl border border-emerald-200 px-3 py-2" /></div></fieldset>
               <div className="flex items-center gap-4">
                 <button type="submit" className="rounded-2xl bg-sky-600 px-6 py-3 text-white hover:bg-sky-700">Save notes & mark visit completed</button>
                 {message && <p className="text-sm text-slate-700">{message}</p>}
@@ -296,7 +298,7 @@ export default function DoctorDashboardPage() {
               <button className="rounded-xl bg-slate-700 px-4 py-2 text-sm text-white">Publish manual summary</button>
             </form>}
             </fieldset>
-          </section>
+          </section></div>
         )}
       </div>
     </div>

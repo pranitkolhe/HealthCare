@@ -1,8 +1,8 @@
-import { Prisma } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 import prisma from '../../config/db';
 import { ForbiddenError, NotFoundError, SlotAlreadyBookedError, UnprocessableError } from '../../shared/errors/AppError';
 import { addMinutes, getDayOfWeek, isInPast } from '../../shared/utils/dateTime';
-import { removeAppointmentFromCalendar, syncAppointmentToCalendar } from '../integrations/calendar.service';
+import { removeAppointmentFromCalendar, syncAppointmentToCalendar, updateAppointmentOnCalendar } from '../integrations/calendar.service';
 import { generatePreVisitSummary } from '../integrations/ai.service';
 import { deliverNotification } from '../integrations/notification.service';
 import { enqueueBackgroundJob } from '../../jobs/queues';
@@ -147,6 +147,35 @@ export async function cancelAppointment(user: { id: string; role: string }, appo
   queueOrRun('notification:deliver', { notificationId: result.notificationId }, () => deliverNotification(result.notificationId));
   queueOrRun('calendar:delete', { appointmentId }, () => removeAppointmentFromCalendar(appointmentId));
   return { appointment: result.appointment };
+}
+
+export async function rescheduleAppointment(user: { id: string; role: string }, appointmentId: string, slotStartValue: string) {
+  const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, include: { patient: true, doctor: { include: { workingHours: true, leaves: true, user: true } } } });
+  if (!appointment) throw new NotFoundError('Appointment not found');
+  if (appointment.patient.userId !== user.id) throw new ForbiddenError('Forbidden');
+  if (appointment.status !== 'BOOKED') throw new UnprocessableError('Only booked appointments can be rescheduled');
+  const slotStart = new Date(slotStartValue);
+  if (isInPast(slotStart)) throw new UnprocessableError('Slot cannot be in the past');
+  const block = appointment.doctor.workingHours.find((hour) => hour.dayOfWeek === getDayOfWeek(slotStart));
+  const slotEnd = addMinutes(slotStart, appointment.doctor.slotDurationMinutes);
+  if (!block || slotStart.toISOString().slice(11, 16) < block.startTime || slotEnd.toISOString().slice(11, 16) > block.endTime) throw new UnprocessableError('Slot outside working hours');
+  if (appointment.doctor.leaves.some((leave) => leave.leaveDate.toISOString().slice(0, 10) === slotStart.toISOString().slice(0, 10))) throw new UnprocessableError('Doctor on leave');
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${appointment.doctorId}:${slotStart.toISOString()}`}))`;
+      if (await tx.appointment.findFirst({ where: { doctorId: appointment.doctorId, slotStart, status: 'BOOKED', id: { not: appointmentId } } })) throw new SlotAlreadyBookedError();
+      await tx.calendarEvent.update({ where: { appointmentId }, data: { syncStatus: 'PENDING' } });
+      const updated = await tx.appointment.update({ where: { id: appointmentId }, data: { slotStart, slotEnd } });
+  const notifications = await Promise.all([appointment.patient.userId, appointment.doctor.userId].map((userId) => tx.notification.create({ data: { appointmentId, userId, type: 'RESCHEDULE' as NotificationType, channel: 'EMAIL' } })));
+      return { updated, notificationIds: notifications.map((notification) => notification.id) };
+    });
+    queueOrRun('calendar:update', { appointmentId }, () => updateAppointmentOnCalendar(appointmentId));
+    result.notificationIds.forEach((notificationId) => queueOrRun('notification:deliver', { notificationId }, () => deliverNotification(notificationId)));
+    return { appointment: result.updated };
+  } catch (error) {
+    if (error instanceof SlotAlreadyBookedError || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw new SlotAlreadyBookedError();
+    throw error;
+  }
 }
 
 export async function getAppointmentDetail(user: { id: string; role: string }, appointmentId: string) {

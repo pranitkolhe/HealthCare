@@ -100,6 +100,7 @@ export async function refreshAccessToken(rawToken: string) {
       return {
         accessToken: buildAccessToken({ id: user.id, email: user.email, role: user.role }),
         refreshToken: newRefreshToken,
+        user: { id: user.id, email: user.email, role: user.role },
       };
     }
   }

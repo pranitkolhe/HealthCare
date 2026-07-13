@@ -20,7 +20,7 @@ const transporter = nodemailer.createTransport({
 });
 
 export async function sendMail(to: string, subject: string, text?: string, html?: string) {
-  const from = env.emailFrom || 'no-reply@localhost';
+  const from = env.emailFrom || 'pranitkolhe3@gmail.com';
   try {
     const result = await transporter.sendMail({ from, to, subject, text, html });
     logger.info('Email sent', { to, subject, messageId: (result as any).messageId });

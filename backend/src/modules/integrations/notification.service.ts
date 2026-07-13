@@ -5,6 +5,7 @@ import { sendMail } from '../../shared/mailer';
 
 const subjects: Record<NotificationType, string> = {
   BOOKING_CONFIRMATION: 'Appointment confirmed',
+  RESCHEDULE: 'Appointment rescheduled',
   REMINDER: 'Appointment reminder',
   CANCELLATION: 'Appointment cancelled',
   DOCTOR_LEAVE: 'Appointment cancelled: doctor unavailable',

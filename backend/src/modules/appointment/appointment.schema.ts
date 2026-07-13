@@ -9,3 +9,7 @@ export const createAppointmentSchema = z.object({
 export const cancelAppointmentSchema = z.object({
   reason: z.string().optional(),
 });
+
+export const rescheduleAppointmentSchema = z.object({
+  slotStart: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date'),
+});

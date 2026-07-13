@@ -21,6 +21,7 @@ export const listAppointmentsSchema = z.object({
 export const noteSchema = z.object({
   doctorNotes: z.string().min(1),
   prescription: z.string().min(1),
+  medications: z.array(z.object({ medicineName: z.string().min(1), dosage: z.string().min(1), frequency: z.string().min(1), durationDays: z.number().int().positive() })).optional(),
 });
 
 const workingHourSchema = z.object({

@@ -48,7 +48,7 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
     }
     const result = await authService.refreshAccessToken(refreshToken);
     res.cookie(env.refreshCookieName, result.refreshToken, refreshCookieOptions());
-    res.status(200).json({ accessToken: result.accessToken });
+    res.status(200).json({ accessToken: result.accessToken, user: result.user });
   } catch (error) {
     next(error);
   }
