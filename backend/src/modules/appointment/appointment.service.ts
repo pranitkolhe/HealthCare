@@ -76,12 +76,9 @@ export async function createAppointment(patientUserId: string, data: { doctorId:
         data: {
           appointmentId: createdAppointment.id,
           urgency: 'MEDIUM',
-          chiefComplaint: data.symptoms,
-          suggestedQuestions: [
-            'When did your symptoms begin?',
-            'Are you currently taking any medications?',
-            'Do you have any known allergies?',
-          ],
+          // Placeholder values are replaced by Gemini once its intake job completes.
+          chiefComplaint: 'Pre-visit summary is being generated.',
+          suggestedQuestions: [],
           status: 'PENDING',
         },
       });

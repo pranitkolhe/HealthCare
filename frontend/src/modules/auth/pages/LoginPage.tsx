@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
-import { login } from '../auth.api';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { login } from "../auth.api";
 
 export default function LoginPage() {
   const { setUser, setToken } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -19,11 +19,11 @@ export default function LoginPage() {
       setUser(result.user);
       setToken(result.accessToken);
       // Navigate based on role
-      if (result.user?.role === 'PATIENT') navigate('/patient');
-      else if (result.user?.role === 'DOCTOR') navigate('/doctor');
-      else if (result.user?.role === 'ADMIN') navigate('/admin');
+      if (result.user?.role === "PATIENT") navigate("/patient");
+      else if (result.user?.role === "DOCTOR") navigate("/doctor");
+      else if (result.user?.role === "ADMIN") navigate("/admin");
     } catch (err) {
-      setError('Login failed');
+      setError("Login failed");
     }
   }
 
@@ -31,10 +31,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 via-white to-slate-100 p-6">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-10 ring-1 ring-slate-200">
         <div className="flex items-center gap-4 mb-8">
-          <div className="h-12 w-12 rounded-2xl bg-sky-600 flex items-center justify-center text-xl text-white font-bold">H</div>
+          <div className="h-12 w-12 rounded-2xl bg-sky-600 flex items-center justify-center text-xl text-white font-bold">
+            H
+          </div>
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Sign in</h1>
-            <p className="text-sm text-slate-500">Login to your healthcare dashboard.</p>
+            <p className="text-sm text-slate-500">
+              Login to your healthcare dashboard.
+            </p>
           </div>
         </div>
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -59,12 +63,19 @@ export default function LoginPage() {
             />
           </label>
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <button type="submit" className="w-full rounded-2xl bg-sky-600 px-4 py-3 text-white shadow-sm transition hover:bg-sky-700">
+          <button
+            type="submit"
+            className="w-full rounded-2xl bg-sky-600 px-4 py-3 text-white shadow-sm transition hover:bg-sky-700"
+          >
             Sign in
           </button>
           <div className="text-center text-sm text-slate-500">
-            Don't have an account?{' '}
-            <button type="button" onClick={() => navigate('/register')} className="font-medium text-sky-600 hover:text-sky-700">
+            Don't have an account?{" "}
+            <button
+              type="button"
+              onClick={() => navigate("/register")}
+              className="font-medium text-sky-600 hover:text-sky-700"
+            >
               Create one
             </button>
           </div>

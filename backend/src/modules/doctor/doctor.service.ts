@@ -137,18 +137,22 @@ export async function addDoctorNotes(doctorUserId: string, appointmentId: string
     if (medications.length) await tx.medicationReminder.createMany({ data: medications.map((medication) => ({ appointmentId, medicineName: medication.medicineName, dosage: medication.dosage, frequency: medication.frequency, nextSendAt: new Date(), endDate: new Date(Date.now() + medication.durationDays * 24 * 60 * 60 * 1000) })) });
   });
 
-  const existingSummary = await prisma.postVisitSummary.findUnique({ where: { appointmentId } });
-  if (!existingSummary) {
-    await prisma.postVisitSummary.create({
-      data: {
-        appointmentId,
-        patientFriendlyExplanation: `Consultation notes: ${doctorNotes}`,
-        medicineSchedule: [],
-        followUpInstructions: 'Post-visit summary is being generated.',
-        status: 'PENDING',
-      },
-    });
-  }
+  await prisma.postVisitSummary.upsert({
+    where: { appointmentId },
+    create: {
+      appointmentId,
+      patientFriendlyExplanation: 'Post-visit summary is being generated.',
+      medicineSchedule: [],
+      followUpInstructions: 'Post-visit summary is being generated.',
+      status: 'PENDING',
+    },
+    update: {
+      patientFriendlyExplanation: 'Post-visit summary is being generated.',
+      medicineSchedule: [],
+      followUpInstructions: 'Post-visit summary is being generated.',
+      status: 'PENDING',
+    },
+  });
 
   void enqueueBackgroundJob('ai:post-visit', { appointmentId }).then((queued) => {
     if (!queued) return generatePostVisitSummary(appointmentId);

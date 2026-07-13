@@ -29,7 +29,13 @@ const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeou
 
 function isTransientGeminiError(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : '';
-  return message.includes('high demand') || message.includes('resource_exhausted') || message.includes('429') || message.includes('503') || message.includes('temporarily unavailable');
+  return error instanceof DOMException && error.name === 'AbortError'
+    || message.includes('aborted')
+    || message.includes('high demand')
+    || message.includes('resource_exhausted')
+    || message.includes('429')
+    || message.includes('503')
+    || message.includes('temporarily unavailable');
 }
 
 function errorDetails(error: unknown) {
@@ -48,7 +54,7 @@ async function generateStructuredJson(prompt: string, responseSchema: JsonSchema
   // Gemini 3 structured output may spend several seconds reasoning before it
   // emits JSON. Keep the API request asynchronous, but allow enough time for
   // a real response instead of aborting it at the legacy 10-second limit.
-  const timeoutMs = env.geminiModel.startsWith('gemini-3') ? Math.max(env.geminiTimeoutMs, 30_000) : env.geminiTimeoutMs;
+  const timeoutMs = env.geminiModel.startsWith('gemini-3') ? Math.max(env.geminiTimeoutMs, 60_000) : Math.max(env.geminiTimeoutMs, 30_000);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(
@@ -84,15 +90,15 @@ async function generateStructuredJson(prompt: string, responseSchema: JsonSchema
 
 async function generateStructuredJsonWithRetry(prompt: string, responseSchema: JsonSchema) {
   let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
       return await generateStructuredJson(prompt, responseSchema);
     } catch (error) {
       lastError = error;
-      if (!isTransientGeminiError(error) || attempt === 2) throw error;
+      if (!isTransientGeminiError(error) || attempt === 3) throw error;
       // This runs after the booking/notes transaction has committed, so the
       // backoff never delays a patient or clinician HTTP response.
-      await delay(750 * (attempt + 1));
+      await delay(2_000 * (attempt + 1));
     }
   }
   throw lastError;
@@ -114,6 +120,7 @@ export async function generatePreVisitSummary(appointmentId: string) {
         required: ['urgency', 'chiefComplaint', 'suggestedQuestions'],
       }
     ));
+    console.log('Gemini generated pre-visit summary:', JSON.stringify({ appointmentId, summary: result }, null, 2));
     await prisma.preVisitSummary.update({
       where: { appointmentId },
       data: { ...result, status: 'READY', attemptCount: { increment: 1 } },
@@ -153,7 +160,8 @@ export async function generatePostVisitSummary(appointmentId: string) {
         required: ['patientFriendlyExplanation', 'medicineSchedule', 'followUpInstructions'],
       }
     ));
-    await prisma.postVisitSummary.update({
+    console.log('Gemini generated post-visit summary:', JSON.stringify({ appointmentId, summary: result }, null, 2));
+    await prisma.postVisitSummary.updateMany({
       where: { appointmentId },
       data: { ...result, status: 'READY', attemptCount: { increment: 1 } },
     });
@@ -163,7 +171,7 @@ export async function generatePostVisitSummary(appointmentId: string) {
     // recorded outcome from the patient. Preserve a clear fallback summary
     // while showing FAILED so the doctor can retry or replace it manually.
     const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { doctorNotes: true, prescription: true } });
-    await prisma.postVisitSummary.update({
+    await prisma.postVisitSummary.updateMany({
       where: { appointmentId },
       data: {
         status: 'FAILED',

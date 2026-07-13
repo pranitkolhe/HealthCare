@@ -8,8 +8,9 @@
   ],
   "scripts": {
   "dev:backend": "npm --prefix backend run dev",
+  "dev:worker": "npm --prefix backend run dev:worker",
   "dev:frontend": "npm --prefix frontend run dev",
-  "dev": "npx concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+  "dev": "npx concurrently \"npm run dev:backend\" \"npm run dev:worker\" \"npm run dev:frontend\"",
 
   "build:backend": "npm --prefix backend run build",
   "build:frontend": "npm --prefix frontend run build",
