@@ -66,7 +66,7 @@ The button is only needed again when a user has never connected, has disconnecte
 
 ## Session persistence
 
-Access tokens are short-lived, but login also sets a secure, HTTP-only refresh cookie lasting seven days. When the website is reopened, the frontend calls `/auth/refresh` and restores the session without showing the login screen. This requires the deployed Render API to use `SameSite=None; Secure` cookies and to allow the Vercel origin with credentials in CORS.
+Login uses a seven-day JWT access token stored in the browser. Reopening or refreshing a tab restores the stored user and token without a refresh-token request or a temporary restoration screen. Signing out immediately clears the local session.
 
 ## Rate limiting and worker use cases
 

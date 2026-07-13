@@ -91,7 +91,7 @@ All API routes start with `/api/v1`. Protected endpoints require `Authorization:
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/change-password` |
+| Auth | `POST /auth/register`, `/auth/login`, `/auth/logout`, `/auth/change-password` |
 | Patient | `GET/PATCH /patients/me`, `GET /patients/me/appointments` |
 | Doctors | `GET /doctors`, `GET /doctors/:doctorId/availability`, `GET /doctors/:doctorId/schedule`, and protected `/doctors/me/*` profile, leave, appointment-summary routes |
 | Appointments | `POST /appointments`, `DELETE /appointments/:appointmentId`, `GET /appointments/:appointmentId` |
