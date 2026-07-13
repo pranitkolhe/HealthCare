@@ -73,7 +73,11 @@ export default function PatientDashboardPage() {
   const doctorsQuery = useQuery<{ doctors: Doctor[]; total: number; page: number; limit: number }>({
     queryKey: ['doctors', searchParams.specialization, searchParams.search],
     queryFn: () => searchDoctors({ specialization: searchParams.specialization, search: searchParams.search, limit: 10 }),
-    enabled: true,
+    enabled: Boolean(searchParams.search || searchParams.specialization),
+  });
+  const doctorSuggestionsQuery = useQuery<{ doctors: Doctor[] }>({
+    queryKey: ['doctorSuggestions'],
+    queryFn: () => searchDoctors({ limit: 100 }),
   });
 
   const availabilityQuery = useQuery<{ slots: Slot[] }>({
@@ -244,8 +248,8 @@ export default function PatientDashboardPage() {
         <h2 className="text-xl font-semibold mb-4">Find a doctor</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Type a doctor name" className="w-full rounded-md border border-gray-200 bg-white px-4 py-3 shadow-sm" />
-          <select value="" onChange={(event) => setSearch(event.target.value)} className="w-full rounded-md border border-gray-200 bg-white px-4 py-3 shadow-sm"><option value="">Choose a registered doctor</option>{doctorsQuery.data?.doctors.map((doctor) => <option key={doctor.id} value={doctor.doctorProfile.fullName}>Dr. {doctor.doctorProfile.fullName} — {doctor.doctorProfile.specialization}</option>)}</select>
-          <select value={specialization} onChange={(event) => setSpecialization(event.target.value)} className="w-full rounded-md border border-gray-200 bg-white px-4 py-3 shadow-sm"><option value="">All specializations</option>{Array.from(new Set(doctorsQuery.data?.doctors.map((doctor) => doctor.doctorProfile.specialization) ?? [])).map((value) => <option key={value} value={value}>{value}</option>)}</select>
+          <select value="" onChange={(event) => { const value = event.target.value; setSearch(value); setSearchParams({ search: value, specialization: '' }); }} className="w-full rounded-md border border-gray-200 bg-white px-4 py-3 shadow-sm"><option value="">Choose a registered doctor</option>{doctorSuggestionsQuery.data?.doctors.map((doctor) => <option key={doctor.id} value={doctor.doctorProfile.fullName}>Dr. {doctor.doctorProfile.fullName} — {doctor.doctorProfile.specialization}</option>)}</select>
+          <select value={specialization} onChange={(event) => { const value = event.target.value; setSpecialization(value); setSearchParams({ search: '', specialization: value }); }} className="w-full rounded-md border border-gray-200 bg-white px-4 py-3 shadow-sm"><option value="">Choose a specialization</option>{Array.from(new Set(doctorSuggestionsQuery.data?.doctors.map((doctor) => doctor.doctorProfile.specialization) ?? [])).map((value) => <option key={value} value={value}>{value}</option>)}</select>
           <div className="flex items-center">
             <button
               onClick={() => setSearchParams({ search, specialization })}
@@ -280,9 +284,9 @@ export default function PatientDashboardPage() {
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : (searchParams.search || searchParams.specialization) ? (
             <p className="text-gray-500">Enter a name or specialization to search.</p>
-          )}
+          ) : null}
         </div>
       </section>}
 
