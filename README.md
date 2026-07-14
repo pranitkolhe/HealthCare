@@ -139,6 +139,8 @@ Key route groups include `/auth`, `/appointments`, `/doctors`, `/patients`, `/ad
 
 - [Requirements status](REQUIREMENTS_STATUS.md) — delivered scope, operational behavior, and known dependencies.
 - [Implementation guide](IMPLEMENTATION_GUIDE.md) — architecture and key engineering decisions.
+- [Technical reference](TECHNICAL_REFERENCE.md) — API routes, database schema, Gemini prompts, and Google Calendar setup.
+- [System design](SYSTEM_DESIGN.md) — double-booking, leave conflicts, slot reservation, and notification reliability.
 
 ## Demo administrator
 
