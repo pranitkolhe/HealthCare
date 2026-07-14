@@ -174,7 +174,9 @@ export async function generatePostVisitSummary(appointmentId: string) {
     ));
     console.log('Gemini generated post-visit summary:', JSON.stringify({ appointmentId, summary: result }, null, 2));
     await prisma.postVisitSummary.updateMany({
-      where: { appointmentId },
+      // A clinician may publish a manual summary while this job is still
+      // running. Only replace the placeholder that is still awaiting AI.
+      where: { appointmentId, status: 'PENDING' },
       data: { ...result, status: 'READY', attemptCount: { increment: 1 } },
     });
   } catch (error) {
@@ -184,7 +186,9 @@ export async function generatePostVisitSummary(appointmentId: string) {
     // while showing FAILED so the doctor can retry or replace it manually.
     const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { doctorNotes: true, prescription: true } });
     await prisma.postVisitSummary.updateMany({
-      where: { appointmentId },
+      // Do not turn a clinician-published READY summary back into FAILED if
+      // an earlier AI request finishes after the manual fallback was saved.
+      where: { appointmentId, status: 'PENDING' },
       data: {
         status: 'FAILED',
         attemptCount: { increment: 1 },
