@@ -48,6 +48,7 @@ export default function DoctorDashboardPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const selectedAppointmentHasEnded = Boolean(selectedAppointment && new Date(selectedAppointment.slotEnd).getTime() < Date.now());
   const queryClient = useQueryClient();
   const profileQuery = useQuery({
     queryKey: ["doctorProfile"],
@@ -494,7 +495,7 @@ export default function DoctorDashboardPage() {
                         </ul>
                       </div>
                     )}
-                  {selectedAppointment.preVisitSummary?.status === "FAILED" && (
+                  {selectedAppointment.preVisitSummary?.status === "FAILED" && !selectedAppointmentHasEnded && (
                     <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
                       AI intake summary is unavailable. Use the patient’s
                       reported symptoms:{" "}
@@ -524,7 +525,7 @@ export default function DoctorDashboardPage() {
                     <p className="text-sm font-medium text-slate-700">
                       Post-visit summary
                     </p>
-                    {selectedAppointment.doctorNotes &&
+                    {selectedAppointment.doctorNotes && !selectedAppointmentHasEnded &&
                     selectedAppointment.postVisitSummary?.status !== "READY" ? (
                       <button
                         type="button"
@@ -598,6 +599,11 @@ export default function DoctorDashboardPage() {
                       </p>
                     </div>
                   </div>
+                </section>
+              ) : selectedAppointmentHasEnded ? (
+                <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+                  <h3 className="font-semibold">Appointment window has ended</h3>
+                  <p className="mt-1">This appointment was not completed before its scheduled end time. Notes, medication reminders, and post-visit summary publishing are unavailable.</p>
                 </section>
               ) : (
                 <fieldset

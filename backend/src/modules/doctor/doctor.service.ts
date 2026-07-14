@@ -7,6 +7,7 @@ import { isInPast, startOfUtcDay } from '../../shared/utils/dateTime';
 import { generatePostVisitSummary, generatePreVisitSummary } from '../integrations/ai.service';
 import { deliverNotification } from '../integrations/notification.service';
 import { enqueueBackgroundJob } from '../../jobs/queues';
+import { markOverdueAppointmentsAsNoShow } from '../appointment/appointment.lifecycle.service';
 
 export async function searchDoctors(query: { specialization?: string; search?: string; page?: number; limit?: number }) {
   const { page, limit, skip } = getPagination(query.page, query.limit);
@@ -88,6 +89,7 @@ export async function getDoctorSchedule(doctorId: string) {
 }
 
 export async function listDoctorAppointments(doctorUserId: string, query: { status?: string; date?: string; page?: number; limit?: number }) {
+  await markOverdueAppointmentsAsNoShow();
   const doctorProfile = await prisma.doctorProfile.findUnique({ where: { userId: doctorUserId } });
   if (!doctorProfile) {
     throw new NotFoundError('Doctor profile not found');
@@ -115,6 +117,7 @@ export async function listDoctorAppointments(doctorUserId: string, query: { stat
 }
 
 export async function addDoctorNotes(doctorUserId: string, appointmentId: string, doctorNotes: string, prescription: string, medications: Array<{ medicineName: string; dosage: string; frequency: string; durationDays: number }> = []) {
+  await markOverdueAppointmentsAsNoShow();
   const doctorProfile = await prisma.doctorProfile.findUnique({ where: { userId: doctorUserId } });
   if (!doctorProfile) {
     throw new NotFoundError('Doctor profile not found');
@@ -129,6 +132,9 @@ export async function addDoctorNotes(doctorUserId: string, appointmentId: string
   }
   if (appointment.slotStart.getTime() > Date.now()) {
     throw new UnprocessableError('Cannot add notes before the appointment');
+  }
+  if (appointment.slotEnd.getTime() < Date.now()) {
+    throw new UnprocessableError('This appointment has ended and can no longer be marked as completed');
   }
 
   await prisma.$transaction(async (tx) => {

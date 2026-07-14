@@ -29,13 +29,25 @@ const delay = (milliseconds: number) => new Promise<void>((resolve) => setTimeou
 
 function isTransientGeminiError(error: unknown) {
   const message = error instanceof Error ? error.message.toLowerCase() : '';
-  return error instanceof DOMException && error.name === 'AbortError'
+  return error instanceof SyntaxError
+    || (error instanceof DOMException && error.name === 'AbortError')
     || message.includes('aborted')
     || message.includes('high demand')
     || message.includes('resource_exhausted')
     || message.includes('429')
     || message.includes('503')
     || message.includes('temporarily unavailable');
+}
+
+function parseGeminiJson(text: string): unknown {
+  // The API is asked for application/json, but models can occasionally wrap a
+  // valid response in a Markdown fence. Strip only that wrapper; malformed
+  // JSON is retried instead of being guessed or silently altered.
+  const normalized = text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  return JSON.parse(normalized) as unknown;
 }
 
 function errorDetails(error: unknown) {
@@ -82,7 +94,7 @@ async function generateStructuredJson(prompt: string, responseSchema: JsonSchema
     }
     const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('').trim();
     if (!text) throw new Error('Gemini returned no structured response');
-    return JSON.parse(text) as unknown;
+    return parseGeminiJson(text);
   } finally {
     clearTimeout(timeout);
   }
@@ -109,7 +121,7 @@ export async function generatePreVisitSummary(appointmentId: string) {
     const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { symptoms: true } });
     if (!appointment) return;
     const result = preVisitSummarySchema.parse(await generateStructuredJsonWithRetry(
-      `You are a clinical intake assistant. Do not diagnose or invent information. Based only on these patient-reported symptoms, return JSON with urgency (LOW, MEDIUM, or HIGH), a chiefComplaint of at most 15 words, and exactly three suggestedQuestions.\n\nSymptoms:\n${appointment.symptoms}`,
+      `You are a clinical intake assistant. Do not diagnose or invent information. Based only on these patient-reported symptoms, return JSON with urgency (LOW, MEDIUM, or HIGH), a chiefComplaint of at most 15 words, and exactly three suggestedQuestions. Return strictly valid JSON only: no Markdown, no comments, and escape all quotation marks inside strings.\n\nSymptoms:\n${appointment.symptoms}`,
       {
         type: 'OBJECT',
         properties: {
@@ -139,7 +151,7 @@ export async function generatePostVisitSummary(appointmentId: string) {
     const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, select: { doctorNotes: true, prescription: true } });
     if (!appointment?.doctorNotes) return;
     const result = postVisitSummarySchema.parse(await generateStructuredJsonWithRetry(
-      `You translate a doctor's notes into a clear patient-friendly summary. Do not add medical facts, medicines, doses, or instructions not present in the input. Return JSON with patientFriendlyExplanation, medicineSchedule, and followUpInstructions.\n\nDoctor notes:\n${appointment.doctorNotes}\n\nPrescription:\n${appointment.prescription ?? ''}`,
+      `You translate a doctor's notes into a clear patient-friendly summary. Do not add medical facts, medicines, doses, or instructions not present in the input. Return JSON with patientFriendlyExplanation, medicineSchedule, and followUpInstructions. Return strictly valid JSON only: no Markdown, no comments, and escape all quotation marks inside strings.\n\nDoctor notes:\n${appointment.doctorNotes}\n\nPrescription:\n${appointment.prescription ?? ''}`,
       {
         type: 'OBJECT',
         properties: {

@@ -768,8 +768,8 @@ export default function PatientDashboardPage() {
             <div>
               <h2 className="text-xl font-semibold">Appointment history</h2>
               <p className="text-sm text-gray-500">
-                Completed visits, patient-friendly summaries, prescriptions, and
-                follow-up instructions.
+                Completed, cancelled, and missed appointments with their
+                recorded outcome.
               </p>
             </div>
             <div className="mt-4 space-y-4">
@@ -831,6 +831,11 @@ export default function PatientDashboardPage() {
                             </p>
                           </div>
                         </div>
+                      ) : appointment.status === "NO_SHOW" ? (
+                        <p className="mt-3 text-sm text-amber-700">
+                          This appointment passed without a recorded visit and
+                          is marked as no-show.
+                        </p>
                       ) : (
                         <p className="mt-3 text-sm text-slate-600">
                           This appointment was cancelled. No visit summary is
@@ -841,7 +846,7 @@ export default function PatientDashboardPage() {
                   ))
               ) : (
                 <p className="text-gray-500">
-                  No completed or cancelled appointments yet.
+                  No completed, cancelled, or missed appointments yet.
                 </p>
               )}
             </div>

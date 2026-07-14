@@ -4,6 +4,7 @@ import { generatePostVisitSummary, generatePreVisitSummary } from '../modules/in
 import { removeAppointmentFromCalendar, syncAppointmentToCalendar, updateAppointmentOnCalendar } from '../modules/integrations/calendar.service';
 import { deliverNotification } from '../modules/integrations/notification.service';
 import { scanDueReminders } from '../modules/integrations/reminder.service';
+import { markOverdueAppointmentsAsNoShow } from '../modules/appointment/appointment.lifecycle.service';
 import { getWorkerConnection } from './queues';
 
 const worker = new Worker('healthcare-background', async (job) => {
@@ -42,3 +43,5 @@ process.on('SIGINT', async () => { await worker.close(); process.exit(0); });
 
 void scanDueReminders().catch((error) => logger.error('Initial reminder scan failed', { error }));
 setInterval(() => void scanDueReminders().catch((error) => logger.error('Reminder scan failed', { error })), 60_000).unref();
+void markOverdueAppointmentsAsNoShow().catch((error) => logger.error('Initial no-show scan failed', { error }));
+setInterval(() => void markOverdueAppointmentsAsNoShow().catch((error) => logger.error('No-show scan failed', { error })), 60_000).unref();

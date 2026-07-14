@@ -77,3 +77,7 @@ The worker is a separate long-running BullMQ process. It keeps slow or unreliabl
 ## Vacant-slot notifications
 
 When a patient cancels, the slot immediately becomes available because only `BOOKED` records participate in the slot uniqueness rule. The application intentionally does not email every other patient about a cancellation: that would be unsolicited marketing/health-related messaging and exposes appointment patterns. The safe future flow is an explicit, specialty/date-based waitlist where a patient opts in, verifies notification preferences, and receives one relevant availability alert.
+
+## Missed appointment lifecycle
+
+A booked appointment remains actionable until 30 minutes after its scheduled end. If the doctor has not marked it completed by then, the system marks it `NO_SHOW`. The background worker scans once per minute, while patient and doctor appointment lists run the same check before returning data. Past, uncompleted appointments therefore leave the upcoming list and cannot be cancelled or rescheduled; they appear in history as missed appointments.

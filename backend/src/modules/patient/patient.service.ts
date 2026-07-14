@@ -1,6 +1,7 @@
 import prisma from '../../config/db';
 import { getPagination } from '../../shared/utils/pagination';
 import { NotFoundError } from '../../shared/errors/AppError';
+import { markOverdueAppointmentsAsNoShow } from '../appointment/appointment.lifecycle.service';
 
 export async function getPatientProfile(userId: string) {
   const profile = await prisma.patientProfile.findUnique({ where: { userId }, include: { user: true } });
@@ -25,6 +26,7 @@ export async function updatePatientProfile(userId: string, data: { fullName?: st
 }
 
 export async function listPatientAppointments(userId: string, query: { status?: string; page?: number; limit?: number }) {
+  await markOverdueAppointmentsAsNoShow();
   const patientProfile = await prisma.patientProfile.findUnique({ where: { userId } });
   if (!patientProfile) {
     throw new NotFoundError('Patient profile not found');
