@@ -2,30 +2,30 @@
 
 ## Architecture
 
-This application uses React, Vite, TypeScript, and TanStack Query in the browser; Express 5 and TypeScript in the API; Prisma with PostgreSQL/Neon for durable data; Redis and BullMQ for asynchronous work; Gemini for structured AI summaries; Nodemailer for email; and Google Calendar API with OAuth 2.0 for calendar invitations. Vercel hosts the SPA and Render hosts the API. A separate Render worker process should run the BullMQ consumer.
+HealthCare is a TypeScript full-stack application. The React/Vite frontend is organized by patient, doctor, administrator, and authentication modules. The Express API uses the same domain boundaries: routes validate input, controllers handle HTTP concerns, services enforce business rules, and Prisma persists data in PostgreSQL. TanStack Query manages frontend server state; BullMQ and Redis move slow, failure-prone work out of HTTP requests.
 
-The React client is split by patient, doctor, admin, and authentication modules. TanStack Query keeps remote data cached and invalidates lists after booking, cancellation, or profile changes. The Express API follows the same module boundaries: routes validate input, controllers translate HTTP concerns, services hold business rules, and Prisma persists state. JWT authentication identifies the user and role middleware limits sensitive actions to the relevant portal.
+The production topology is Vercel for the browser application, Render for the API and a separate worker process, Neon for PostgreSQL, Redis for BullMQ, Gemini for AI, Brevo for production SMTP relay, and Google Calendar for calendar sync. Local development uses the same Nodemailer SMTP integration with local or test SMTP credentials.
 
-## Booking integrity and leave handling
+## Booking integrity
 
-Availability is calculated from each doctor’s working hours, slot duration, leave dates, and existing booked appointments. It is only a user-interface guide; it is not trusted as the final protection against races.
+Availability is informative; the database makes the final decision. Booking opens a PostgreSQL transaction, takes an advisory lock derived from doctor and slot, rechecks availability, and inserts only if the appointment remains free. A partial unique index for `BOOKED` appointments is the final safeguard. This combination prevents duplicate active bookings under concurrent requests while letting a cancelled slot be reused.
 
-On booking, the API starts a database transaction and takes a PostgreSQL advisory transaction lock derived from the doctor ID and start time. It checks again for a booked appointment and inserts the appointment only when the slot remains available. A partial unique database index on `(doctorId, slotStart)` where status is `BOOKED` is the final concurrency safeguard. This layered approach prevents simultaneous requests from creating duplicate active bookings while allowing a cancelled slot to be reused.
+Working hours, slot duration, existing bookings, and leave dates determine visible availability. Doctor or administrator leave actions cancel affected booked appointments and create durable notifications after the transaction succeeds.
 
-When a doctor is marked on leave, the service finds booked appointments for that UTC day inside the same transaction, cancels them, and writes durable `DOCTOR_LEAVE` notifications for affected patients. The notifications are delivered after the transaction commits, so no message claims an appointment changed when the database change failed.
+## Visit and summary workflow
 
-There is no temporary “slot hold” table. The application uses atomic confirm-time booking instead: a displayed slot can be claimed by another patient first, in which case the requester receives a slot-conflict response and chooses another time. This avoids abandoned hold records and keeps the reservation model simple.
+Booking creates a pending pre-visit summary. A worker sends patient symptoms to Gemini with a constrained prompt and expects JSON containing urgency, a concise complaint, and clinician follow-up questions. The response is normalized for code fences, parsed as JSON, validated by Zod, and retried for provider timeouts, demand errors, and malformed responses.
 
-## AI, notifications, and Calendar
+During the appointment window, a doctor records notes, prescription, and optional medication-reminder details. This completes the appointment and queues a post-visit summary. Gemini is instructed to use only the recorded notes and prescription. If AI fails, the patient still sees a safe clinician-based fallback and the doctor can publish a manual patient summary. A booked appointment left incomplete for 30 minutes after its end becomes `NO_SHOW` and is no longer actionable.
 
-Booking creates a pending pre-visit summary. A BullMQ job calls Gemini with a constrained prompt and requests JSON. Zod validates urgency, a concise complaint, and exactly three doctor questions before the result is stored. After a doctor records notes and prescription, another job produces the patient-facing explanation, medicine schedule, and follow-up instructions. Transient model failures are retried. A failed post-visit result preserves a safe fallback based on the clinician’s recorded information, so AI availability never blocks the core care workflow.
+## Notifications, email, and Calendar
 
-Email is represented as a durable `Notification` record before delivery. BullMQ performs delivery through Nodemailer and records sent/failed state, attempt count, timestamp, and error text. This separation lets booking return promptly and gives the UI a delivery status. The background queue also handles calendar create/delete and AI work. For reliability in production, deploy the worker independently from the Render web service and monitor its logs/Redis connection.
+Notifications are written to PostgreSQL before delivery. The worker sends them through Nodemailer and records delivery status, attempt count, timestamp, and failure details. This covers booking, cancellation, reschedule, appointment, and medication reminders. Local environments use normal SMTP/test-inbox credentials; Render uses Brevo SMTP credentials through the same `SMTP_*` variables. Medication emails include the saved medicine schedule and prescription when available.
 
-Google Calendar starts with an authenticated connect endpoint that creates a signed, short-lived OAuth state. The callback exchanges the authorization code, encrypts the refresh token with AES-256-GCM, and stores it with the selected calendar. On booking, a calendar job creates an event with both participant email addresses and asks Google to send updates. On cancellation, the matching event is deleted. Refresh tokens are never returned to the browser.
+Google Calendar uses OAuth 2.0. The callback exchanges the code and stores encrypted refresh tokens. Calendar jobs create, update, or delete events asynchronously and notify attendees through Google. Calendar failure is isolated from the booking transaction.
 
-## Scaling and operational value
+## Security and operations
 
-The API stays responsive because expensive or failure-prone work is queued rather than performed inline. API instances can scale horizontally because PostgreSQL remains the source of truth, advisory locks coordinate simultaneous writers, and Redis distributes background jobs. Prisma keeps database access typed and migrations versioned. Role checks, input validation, Helmet, CORS, rate limiting, encrypted calendar tokens, and structured logging provide a baseline suitable for extending the platform.
+Passwords are hashed with bcrypt. JWT authentication, RBAC, Zod validation, Helmet, CORS, compression, and rate limiting protect the API baseline. Calendar refresh tokens are encrypted before storage. Logs are structured with Winston; secrets and tokens must never be logged.
 
-Current extension points are deliberately visible: `MedicationReminder` exists in the schema but needs a repeatable worker/scheduler and prescription-to-reminder extraction; appointment reminders need a scheduled job; and rescheduling needs an API plus Google Calendar event update. Adding these features through the existing notification and queue boundaries preserves the same scalable architecture.
+The API and worker should be monitored separately. If Redis is configured but the worker is not running, queued summaries, email, reminders, and calendar jobs will remain pending. Database migrations must run before a new API version starts. See [README.md](README.md) for configuration and deployment commands.

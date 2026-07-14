@@ -1,37 +1,63 @@
-# Healthcare Appointment & Follow-up Manager
+# HealthCare Appointment & Follow-up Manager
 
-A full-stack clinic workflow application for patient appointment booking, doctor preparation, follow-up communication, and clinic administration.
+A full-stack clinic workflow application for booking appointments, preparing clinicians for visits, publishing patient-friendly follow-up information, and managing operational notifications.
 
-**Live frontend:** https://health-care-frontend-lemon.vercel.app/
+**Live application:** https://health-care-frontend-lemon.vercel.app/
 
-The frontend is deployed on Vercel, the API on Render, and PostgreSQL on Neon. Configure the deployed Vercel app with the Render API URL through `VITE_API_BASE_URL`; the Render service must allow the Vercel origin in `CORS_ORIGIN`.
+**Demo administrator:** `pranitkolhe3@gmail.com`  
+**Password:** `Admin@1234`
 
-## What this project solves
+## Highlights
 
-Patients can find a doctor, select an available time slot, describe symptoms, and receive confirmation. Doctors receive an AI-generated pre-visit intake summary, manage availability/leave, and turn visit notes into a patient-friendly follow-up summary. Administrators onboard and manage doctors. The platform protects a slot from concurrent booking attempts and records notifications/calendar-sync states for operational visibility.
+- Role-specific patient, doctor, and administrator portals
+- Doctor search, availability, booking, cancellation, and rescheduling
+- Database-level protection against double booking
+- AI-assisted pre-visit intake and post-visit summaries with safe fallbacks
+- Appointment, medication, cancellation, and reschedule email notifications
+- Google Calendar OAuth and appointment event synchronization
+- Missed-appointment lifecycle with automatic `NO_SHOW` handling
 
-## Portals and primary use cases
+## Technology
 
-| Role | Primary use case |
+| Area | Technology |
 | --- | --- |
-| Patient | Register, maintain profile, search/filter doctors, view availability, book/cancel appointments, see summaries/notifications, and connect Google Calendar. |
-| Doctor | Manage profile and working hours, view appointments and pre-visit summaries, add notes/prescriptions, generate/retry post-visit summaries, mark leave, and connect Google Calendar. |
-| Admin | Create/update/deactivate doctor accounts, view users, and mark doctor leave. |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, TanStack Query, Axios, React Router |
+| Backend | Node.js, Express 5, TypeScript, Zod |
+| Data | PostgreSQL / Neon, Prisma ORM |
+| Background work | Redis, BullMQ, separate worker process |
+| Authentication & security | JWT, bcrypt, Helmet, CORS, rate limiting, compression |
+| AI | Google Gemini structured JSON responses, validated with Zod |
+| Email | Nodemailer; local SMTP in development and Brevo SMTP relay in production |
+| Calendar | Google Calendar API and OAuth 2.0 |
+| Hosting | Vercel (frontend), Render (API and worker), Neon (PostgreSQL) |
 
-## Demo administrator
+## Core workflows
 
-The Prisma seed creates this development/demo account:
+### Appointment lifecycle
 
-```text
-Email: pranitkolhe3@gmail.com
-Password: Admin@1234
-```
+1. A patient selects a doctor, an available slot, and enters symptoms.
+2. The API confirms the slot inside a PostgreSQL transaction. An advisory lock and partial unique index prevent concurrent bookings for the same doctor and time.
+3. The system creates durable notification, calendar, and AI-summary records. The worker processes them outside the web request.
+4. The doctor reviews the pre-visit intake, records notes and prescription, and completes the visit during its scheduled window.
+5. Gemini produces a patient-friendly post-visit summary. If AI is unavailable, the doctor can publish a manual summary and the patient still receives the clinician-entered prescription and follow-up information.
+6. A booked appointment that remains incomplete for 30 minutes after its scheduled end is marked `NO_SHOW`. It becomes read-only and cannot create medication reminders or post-visit content.
 
-Run `npm --prefix backend exec prisma db seed` after migrations to create or reactivate it. Change this password and do not use these credentials for a public production account.
+### AI safety and resilience
 
-## Local setup
+Gemini is an assistive feature, not a clinical decision-maker. Pre-visit prompts use only patient-reported symptoms. Post-visit prompts must not add facts, medicines, doses, or instructions beyond the doctor’s notes and prescription. Outputs are parsed as strict JSON, schema-validated, retried for transient provider errors, and recorded as `READY` or `FAILED` without blocking booking or clinician-entered care information.
 
-Prerequisites: Node.js 20+, PostgreSQL (or a Neon database), Redis for background jobs, a Gemini API key, SMTP credentials, and Google OAuth credentials for Calendar.
+## Local development
+
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL database (local or Neon)
+- Redis (optional only when background jobs are not required; required for normal AI, email, calendar, and reminder processing)
+- Gemini API key for AI summaries
+- SMTP credentials for email
+- Google OAuth credentials for Calendar integration
+
+### Setup
 
 ```bash
 npm install
@@ -43,79 +69,77 @@ npm --prefix backend exec prisma db seed
 npm run dev
 ```
 
-Start the worker separately in the current project state:
-
-```bash
-npm --prefix backend run dev:worker
-```
+`npm run dev` starts the API, BullMQ worker, and Vite frontend together. The worker terminal is where AI and email job logs appear.
 
 For a production build:
 
 ```bash
 npm run build
-npm --prefix backend run start
-npm --prefix backend run worker
+npm run start:all
 ```
 
-Run the API and worker as separate Render services/processes. The worker is required whenever `REDIS_URL` is configured, because it consumes AI, email, and calendar jobs.
+## Environment configuration
 
-## Configuration
+Use the committed example files as templates. Do not commit `.env` files, SMTP passwords, API keys, JWT secrets, or OAuth client secrets.
 
-`backend/.env` requires:
+| Group | Required variables | Purpose |
+| --- | --- | --- |
+| Database | `DATABASE_URL`, optional `DIRECT_URL` | PostgreSQL / Neon connection |
+| Auth | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Minimum 32-character JWT secrets |
+| Web | `PORT`, `CORS_ORIGIN`, `COOKIE_DOMAIN` | API listener and browser access |
+| Queue | `REDIS_URL` | BullMQ queue and worker connection |
+| AI | `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIMEOUT_MS` | Structured summary generation |
+| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` | Nodemailer transport |
+| Calendar | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY` | OAuth and encrypted refresh tokens |
 
-- `DATABASE_URL` and optional `DIRECT_URL`: Neon/PostgreSQL URLs.
-- JWT secrets of at least 32 characters.
-- `CORS_ORIGIN`: comma-separated browser origins, including the Vercel URL.
-- `REDIS_URL`: BullMQ/Redis connection.
-- `GEMINI_API_KEY`, `GEMINI_MODEL`, and timeout settings.
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `EMAIL_FROM`.
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and a base64-encoded 32-byte `GOOGLE_TOKEN_ENCRYPTION_KEY`.
+### Email environments
 
-`frontend/.env` requires `VITE_API_BASE_URL`, for example `https://your-render-service.onrender.com/api/v1`.
+The application uses one Nodemailer SMTP transport configured entirely by environment variables.
 
-Never commit real credentials. Rotate the SMTP password shown in the current example file before publishing the repository.
+- **Local development:** use a normal SMTP provider or a test inbox such as Mailtrap. Set `SMTP_*` to local-development credentials.
+- **Render / production:** use Brevo SMTP relay. Set `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=587`, `SMTP_USER` to the Brevo SMTP login, `SMTP_PASS` to a Brevo SMTP key, and `EMAIL_FROM` to a sender verified in Brevo.
 
-## Google Calendar setup
+Brevo credentials belong only in Render environment variables. Never use a personal mailbox password or expose a Brevo SMTP key in source control.
 
-1. In Google Cloud, create an OAuth 2.0 Web application and enable Google Calendar API.
-2. Add the exact backend callback URL as an authorized redirect URI: `https://<render-api>/api/v1/calendar/oauth/callback` (local: `http://localhost:4000/api/v1/calendar/oauth/callback`).
-3. Set the Google variables in the Render backend environment.
-4. Log in as a patient or doctor and select **Connect Calendar**.
-5. Grant calendar-event permission. Future booked appointments are synced; Google sends invitations using Calendar’s update notifications.
+## Deployment
 
-Refresh tokens are encrypted before storage. Calendar events are created in the connected doctor’s calendar first; if the doctor is not connected, the connected patient’s calendar is used.
+Deploy the frontend to Vercel and configure `VITE_API_BASE_URL` with the Render API URL. Deploy the API and worker as separate long-running Render services from the same repository:
 
-## API overview
+| Service | Build command | Start command |
+| --- | --- | --- |
+| API | `npm run build` | `npm --prefix backend run start` |
+| Worker | `npm run build` | `npm --prefix backend run worker` |
 
-All API routes start with `/api/v1`. Protected endpoints require `Authorization: Bearer <accessToken>`.
+Before release, run Prisma migrations, configure all backend environment variables on Render, set the Vercel origin in `CORS_ORIGIN`, and configure the deployed API URL in Vercel. The worker is mandatory when Redis is configured; without it, queued AI, email, calendar, and reminder jobs remain pending.
 
-| Area | Endpoints |
-| --- | --- |
-| Auth | `POST /auth/register`, `/auth/login`, `/auth/logout`, `/auth/change-password` |
-| Patient | `GET/PATCH /patients/me`, `GET /patients/me/appointments` |
-| Doctors | `GET /doctors`, `GET /doctors/:doctorId/availability`, `GET /doctors/:doctorId/schedule`, and protected `/doctors/me/*` profile, leave, appointment-summary routes |
-| Appointments | `POST /appointments`, `DELETE /appointments/:appointmentId`, `GET /appointments/:appointmentId` |
-| Admin | `/admin/doctors`, `/admin/users`, and user-deactivation routes |
-| Notifications | `GET /notifications/me` |
-| Calendar | `GET /calendar/oauth/connect`, `GET /calendar/oauth/callback`, `DELETE /calendar/oauth/disconnect` |
+## Google Calendar
 
-Request schemas are defined beside each module in `backend/src/modules/*/*.schema.ts`.
+Create a Google OAuth web application, enable the Google Calendar API, and register the exact callback URL:
 
-## Data model
+```text
+https://<render-api>/api/v1/calendar/oauth/callback
+```
 
-Prisma models include `User`, `DoctorProfile`, `PatientProfile`, `WorkingHour`, `DoctorLeave`, `Appointment`, `PreVisitSummary`, `PostVisitSummary`, `Notification`, `CalendarEvent`, `MedicationReminder`, and `RefreshToken`. See `backend/prisma/schema.prisma` for field-level definitions and migrations.
+For local development use `http://localhost:4000/api/v1/calendar/oauth/callback`. A connected doctor calendar is preferred; otherwise a connected patient calendar is used. Refresh tokens are encrypted before persistence and never returned to the browser.
 
-## AI prompts and safety
+## API and project structure
 
-Pre-visit processing instructs Gemini to use only patient-reported symptoms and return urgency, a chief complaint, and exactly three doctor questions. Post-visit processing instructs it not to add clinical facts, medicines, doses, or instructions beyond the doctor’s notes/prescription. Responses are schema-validated with Zod; failures are stored and do not prevent booking or access to clinician-entered information.
+All API routes are prefixed with `/api/v1`; protected routes require `Authorization: Bearer <accessToken>`.
 
-## Rate limiting and background worker
+```text
+backend/src/modules/     Domain routes, controllers, validation, and services
+backend/src/jobs/        BullMQ queue and worker
+backend/prisma/          Prisma schema, migrations, and seed
+frontend/src/modules/    Role-specific React screens and API clients
+```
 
-The API applies a general IP-based rate limit and a stricter authentication limit. This reduces accidental overload and protects login routes from password-guessing. Limits are configured through `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX`, and `AUTH_RATE_LIMIT_MAX` and are returned in standard rate-limit headers.
+Key route groups include `/auth`, `/appointments`, `/doctors`, `/patients`, `/admin`, `/notifications`, and `/calendar`. See the route and schema files beside each backend module for request details.
 
-The BullMQ worker is required in development and production. It executes AI summaries, email delivery/retries, Google Calendar synchronization, appointment reminders, and medication reminders outside the HTTP request path. Start it with `npm --prefix backend run dev:worker` locally or `npm --prefix backend run worker` after building on Render.
+## Documentation
 
-## Documentation deliverables
+- [Requirements status](REQUIREMENTS_STATUS.md) — delivered scope, operational behavior, and known dependencies.
+- [Implementation guide](IMPLEMENTATION_GUIDE.md) — architecture and key engineering decisions.
 
-- [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md): requirement-by-requirement implementation checklist and operational flows.
-- [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md): system design write-up (under 800 words) covering booking conflicts, leave handling, slot confirmation, and notification reliability.
+## Demo administrator
+
+The development seed creates an administrator account. See `backend/prisma/seed.ts` for current seed data. Change seeded credentials before any public deployment.
