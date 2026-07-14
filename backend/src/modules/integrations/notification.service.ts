@@ -12,6 +12,20 @@ const subjects: Record<NotificationType, string> = {
   MEDICATION_REMINDER: 'Medication reminder',
 };
 
+// Appointment slots are created and displayed by the application in India
+// Standard Time. Dates are stored in UTC, so email rendering must explicitly
+// use the same timezone instead of the (often UTC) server timezone.
+const appointmentDateFormat = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+const appointmentDateOnlyFormat = new Intl.DateTimeFormat('en-IN', {
+  timeZone: 'Asia/Kolkata',
+  dateStyle: 'medium',
+});
+
 /**
  * Deliver a notification that has already been written to Postgres. This is
  * deliberately fire-and-forget from request handlers: email availability must
@@ -43,11 +57,11 @@ export async function deliverNotification(notificationId: string) {
     const appointment = notification.appointment;
     const medicationDetails = notification.type === 'MEDICATION_REMINDER' && appointment
       ? appointment.medicationReminders.length
-        ? `\n\nMedication details:\n${appointment.medicationReminders.map((medication) => `• ${medication.medicineName}: ${medication.dosage}, ${medication.frequency} (until ${medication.endDate.toLocaleDateString()})`).join('\n')}${appointment.prescription ? `\n\nDoctor's prescription:\n${appointment.prescription}` : ''}`
+        ? `\n\nMedication details:\n${appointment.medicationReminders.map((medication) => `• ${medication.medicineName}: ${medication.dosage}, ${medication.frequency} (until ${appointmentDateOnlyFormat.format(medication.endDate)})`).join('\n')}${appointment.prescription ? `\n\nDoctor's prescription:\n${appointment.prescription}` : ''}`
         : appointment.prescription ? `\n\nDoctor's prescription:\n${appointment.prescription}` : '\n\nPlease follow the medication instructions given by your doctor.'
       : '';
     const text = appointment
-      ? `${notification.type.replace(/_/g, ' ')}\n\nDoctor: ${appointment.doctor.fullName}\nWhen: ${appointment.slotStart.toLocaleString()}\nPatient: ${appointment.patient.fullName}${medicationDetails}`
+      ? `${notification.type.replace(/_/g, ' ')}\n\nDoctor: ${appointment.doctor.fullName}\nWhen: ${appointmentDateFormat.format(appointment.slotStart)} IST\nPatient: ${appointment.patient.fullName}${medicationDetails}`
       : notification.type.replace(/_/g, ' ');
 
     await sendMail(notification.user.email, subjects[notification.type], text);
